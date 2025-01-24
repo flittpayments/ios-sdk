@@ -8,10 +8,10 @@ Pod::Spec.new do |s|
   s.version          = "0.10.0"
   s.summary          = "Library for accepting payments directly from iOS application's clients."
 
-  s.homepage         = "https://github.com/cloudipsp/ios-sdk"
+  s.homepage         = "https://github.com/flittpayments/ios-sdk"
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
-  s.author           = { "Maxim Kozenko" => "max.dnu@gmail.com" }
-  s.source           = { :git => "https://github.com/cloudipsp/ios-sdk.git", :tag => s.version.to_s }
+  s.author           = { "Maxim Kozenko" => "mkozenko@flitt.com" }
+  s.source           = { :git => "https://github.com/flittpayments/ios-sdk.git", :tag => s.version.to_s }
 
   s.platform     = :ios, '9.0'
   s.requires_arc = true

@@ -2,7 +2,7 @@
   "name": "Cloudipsp",
   "version": "0.9.3",
   "summary": "Library for accepting payments directly from iOS application's clients.",
-  "homepage": "https://github.com/cloudipsp/ios-sdk",
+  "homepage": "https://github.com/flittpayments/ios-sdk",
   "license": {
     "type": "MIT",
     "file": "LICENSE"
@@ -11,7 +11,7 @@
     "Maxim Kozenko": "max.dnu@gmail.com"
   },
   "source": {
-    "git": "https://github.com/cloudipsp/ios-sdk.git",
+    "git": "https://github.com/flittpayments/ios-sdk.git",
     "tag": "0.9.3"
   },
   "platforms": {

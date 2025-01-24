@@ -27,7 +27,7 @@ Once you have your Swift package set up, adding Cloudipsp as a dependency is as 
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/cloudipsp/ios-sdk.git", .upToNextMajor(from: "0.9.3"))
+    .package(url: "https://github.com/flittpayments/ios-sdk.git", .upToNextMajor(from: "0.9.3"))
 ]
 ```
 
