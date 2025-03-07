@@ -253,7 +253,7 @@ const NSInteger WITH_3DS = 1;
 
 @end
 
-NSString * const HOST = @"https://api.fondy.eu";
+NSString * const HOST = @"https://pay.flitt.com";
 NSString * const URL_CALLBACK = @"http://callback";
 NSString * const DATE_AND_TIME_FORMAT = @"dd.MM.yyyy HH:mm:ss";
 NSString * const DATE_FORMAT = @"dd.MM.yyyy";

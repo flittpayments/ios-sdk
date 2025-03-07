@@ -4,8 +4,8 @@
 #
 
 Pod::Spec.new do |s|
-  s.name             = "Cloudipsp"
-  s.version          = "0.10.0"
+  s.name             = "Flitt"
+  s.version          = "1.0.0"
   s.summary          = "Library for accepting payments directly from iOS application's clients."
 
   s.homepage         = "https://github.com/flittpayments/ios-sdk"

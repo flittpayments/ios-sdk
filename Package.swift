@@ -5,8 +5,8 @@ import PackageDescription
 
 
 let package = Package(
-  name: "Cloudipsp",
+  name: "Flitt",
   platforms: [.iOS(.v10)],
-  products: [.library(name: "Cloudipsp", targets: ["Cloudipsp"])],
+  products: [.library(name: "Flitt", targets: ["Cloudipsp"])],
   targets: [.target(name: "Cloudipsp", path: "Cloudipsp", publicHeadersPath: "")]
 )
