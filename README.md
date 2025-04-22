@@ -165,7 +165,134 @@ class TokenPaymentViewController: UIViewController, PSApplePayCallbackDelegate, 
 }
 ```
 
-## Step 6: Test Your Integration
+## Step 6: Implement Bank Payment
+
+If you want to offer direct bank payments as an alternative payment method:
+
+```swift
+import UIKit
+import Flitt
+
+class ViewController: UIViewController {
+
+    private var cloudipsp: PSCloudipspApi!
+    private var banks: [PSBank] = []
+
+    private lazy var tableView: UITableView = {
+        let table = UITableView()
+        table.translatesAutoresizingMaskIntoConstraints = false
+        table.register(BankCell.self, forCellReuseIdentifier: "BankCell")
+        table.dataSource = self
+        table.delegate = self
+        return table
+    }()
+
+    private lazy var order: PSOrder = {
+        let order = PSOrder(
+            order: 1000,
+            aStringCurrency: "GEL",
+            aIdentifier: UUID().uuidString,
+            aAbout: "Testpayment"
+        )
+        return order!
+    }()
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .white
+        setupCloudipsp()
+        setupTableView()
+        getBankList()
+    }
+
+    private func setupCloudipsp() {
+        let cloudipspView = PSCloudipspWKWebView()
+        cloudipsp = PSCloudipspApi(merchant: 1549901, andCloudipspView: cloudipspView)
+    }
+
+    private func setupTableView() {
+        view.addSubview(tableView)
+
+        NSLayoutConstraint.activate([
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.leftAnchor.constraint(equalTo: view.leftAnchor),
+            tableView.rightAnchor.constraint(equalTo: view.rightAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    private func getBankList() {
+        cloudipsp.getAvailableBankList(with: order, pay: self) { [weak self] banks in
+            print("✅ Banks loaded: \(banks?.count ?? 0)")
+            self?.banks = banks ?? []
+            DispatchQueue.main.async {
+                self?.tableView.reloadData()
+            }
+        }
+    }
+}
+
+// MARK: - PSPayCallbackDelegate
+
+extension ViewController: PSPayCallbackDelegate {
+    func onPaidFailure(_ error: Error!) {
+        print("❌ Payment Failed: \(error.localizedDescription)")
+        // Handle payment failure - show error message, offer retry options, etc.
+    }
+
+    func onRedirected(_ bankDetails: PSBankRedirectDetails!) {
+        print("🔀 Redirected to bank: \(bankDetails.url ?? "")")
+        // The SDK will handle the redirection automatically if autoRedirect is set to true
+        // Otherwise, you can manually present a web view with the URL from bankDetails
+    }
+    
+    // Other delegate methods should be implemented as needed
+}
+
+// MARK: - UITableViewDataSource
+
+extension ViewController: UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return banks.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let bank = banks[indexPath.row]
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: "BankCell", for: indexPath) as? BankCell else {
+            return UITableViewCell()
+        }
+        cell.configure(with: bank)
+        return cell
+    }
+}
+
+// MARK: - UITableViewDelegate
+
+extension ViewController: UITableViewDelegate {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let selectedBank = banks[indexPath.row]
+        tableView.deselectRow(at: indexPath, animated: true)
+
+        print("🟢 Initiating payment for: \(selectedBank.name ?? "Unknown")")
+
+        // When autoRedirect is set to true, the SDK will automatically redirect the user to the bank's payment page
+        // When set to false, you'll need to handle the redirection manually in the onRedirected callback
+        cloudipsp.initiateBankPayment(
+            with: order,
+            bank: selectedBank,
+            autoRedirect: true,  // Set to true for automatic redirection to the bank's payment page
+            pay: self
+        )
+    }
+}
+```
+
+**Note**: 
+- Setting `autoRedirect: true` in the `initiateBankPayment` method will automatically redirect the user to the bank's payment page without requiring additional code.
+- The `onRedirected` callback provides a `PSBankRedirectDetails` object that contains the URL to the bank's payment page, which is automatically handled when `autoRedirect` is true.
+- For the Bank Payment implementation, you'll need to create a custom `BankCell` class that conforms to `UITableViewCell` to display bank options.
+
+## Step 7: Test Your Integration
 
 1. **Sandbox Testing**:
     - Use Apple's sandbox environment for testing

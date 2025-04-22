@@ -17,6 +17,9 @@
 #import "PSCurrency.h"
 #import "PSReceipt.h"
 #import "PSOrder.h"
+#import "PSBank.h"
+#import "PSDeviceInfoProvider.h"
+#import "PSBankRedirectDetails.h"
 
 #pragma mark - PSPayCallbackDelegateMainWrapper
 
@@ -254,6 +257,7 @@ const NSInteger WITH_3DS = 1;
 @end
 
 NSString * const HOST = @"https://pay.flitt.com";
+//NSString * const HOST = @"https://sandbox.pay.flitt.dev";
 NSString * const URL_CALLBACK = @"http://callback";
 NSString * const DATE_AND_TIME_FORMAT = @"dd.MM.yyyy HH:mm:ss";
 NSString * const DATE_FORMAT = @"dd.MM.yyyy";
@@ -341,6 +345,7 @@ PSLocalization *_localization;
     } aPayDelegate:wrapper];
 }
 
+
 - (void)applePayWithToken:(NSString *)token
               andDelegate:(id<PSApplePayCallbackDelegate>)delegate {
     [self assertApplePay];
@@ -358,6 +363,236 @@ PSLocalization *_localization;
         } aPayDelegate:wrapper];
     } payDelegate:wrapper];
 }
+
+- (void)ajaxInfoWithToken:(NSString *)token
+              payDelegate:(id<PSPayCallbackDelegate>)delegate
+                onSuccess:(void (^)(NSDictionary *json))success {
+    
+    NSDictionary *params = @{@"token": token};
+    
+    [self payJsonNetworkRequestByPath:@"/api/checkout/ajax/info"
+                             jsonBody:[PSCloudipspApi requestJson:params]
+                            onSuccess:^(NSDictionary *json) {
+        if (success) {
+            success(json);
+        }
+    } payDelegate:delegate];
+}
+
+
+- (void)getAvailableBankListWithToken:(NSString *)token
+                          payDelegate:(id<PSPayCallbackDelegate>)delegate
+                              success:(void (^)(NSArray<PSBank *> *banks))success {
+    
+    NSDictionary *params = @{@"token": token};
+
+    [self payJsonNetworkRequestByPath:@"/api/checkout/ajax/info"
+                             jsonBody:[PSCloudipspApi requestJson:params]
+                            onSuccess:^(NSDictionary *json) {
+        
+        NSMutableArray<PSBank *> *banks = [NSMutableArray array];
+        
+        NSDictionary *tabs = json[@"tabs"];
+        if ([tabs isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *trustly = tabs[@"trustly"];
+            if ([trustly isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *paymentSystems = trustly[@"payment_systems"];
+                if ([paymentSystems isKindOfClass:[NSDictionary class]]) {
+                    for (NSString *key in paymentSystems) {
+                        NSDictionary *bankData = paymentSystems[key];
+                        if ([bankData isKindOfClass:[NSDictionary class]]) {
+                            PSBank *bank = [[PSBank alloc] initWithBankId:key
+                                                         countryPriority:[bankData[@"country_priority"] integerValue]
+                                                            userPriority:[bankData[@"user_priority"] integerValue]
+                                                             quickMethod:[bankData[@"quick_method"] boolValue]
+                                                             userPopular:[bankData[@"user_popular"] boolValue]
+                                                                    name:bankData[@"name"] ?: @""
+                                                                 country:bankData[@"country"] ?: @""
+                                                               bankLogo:bankData[@"bank_logo"] ?: @""
+                                                                  alias:bankData[@"alias"] ?: @""];
+                            [banks addObject:bank];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort the banks
+        [banks sortUsingComparator:^NSComparisonResult(PSBank *bank1, PSBank *bank2) {
+            if (bank1.userPriority != bank2.userPriority) {
+                return bank2.userPriority > bank1.userPriority ? NSOrderedAscending : NSOrderedDescending;
+            }
+            return bank2.countryPriority > bank1.countryPriority ? NSOrderedAscending : NSOrderedDescending;
+        }];
+
+        if (success) {
+            success(banks);
+        }
+    } payDelegate:delegate];
+}
+
+
+- (void)getAvailableBankListWithOrder:(PSOrder *)order
+                          payDelegate:(id<PSPayCallbackDelegate>)delegate
+                              success:(void (^)(NSArray<PSBank *> *banks))success {
+
+    [self getToken:order onSuccess:^(NSString *token) {
+        [self getAvailableBankListWithToken:token
+                                payDelegate:delegate
+                                    success:success];
+    } payDelegate:delegate];
+}
+
+- (void)initiateBankPaymentWithToken:(NSString *)token
+                                bank:(PSBank *)bank
+                        autoRedirect:(BOOL)autoRedirect
+                         payDelegate:(id<PSPayCallbackDelegate>)delegate {
+
+    PSDeviceInfoProvider *deviceInfo = [[PSDeviceInfoProvider alloc] init];
+    NSString *encodedDeviceData = [deviceInfo getEncodedDeviceFingerprint];
+
+    [self ajaxInfoWithToken:token payDelegate:delegate onSuccess:^(NSDictionary *receipt) {
+        NSDictionary *orderData = receipt[@"order_data"];
+
+        if (![orderData isKindOfClass:[NSDictionary class]]) {
+            if ([delegate respondsToSelector:@selector(onPaidFailure:)]) {
+                NSError *error = [NSError errorWithDomain:@"CloudipspApi"
+                                                     code:400
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Missing or invalid order data"}];
+                [delegate onPaidFailure:error];
+            }
+            return;
+        }
+
+        NSMutableDictionary *requestObj = [NSMutableDictionary dictionary];
+        requestObj[@"merchant_id"] = orderData[@"merchant_id"];
+        requestObj[@"amount"] = orderData[@"amount"];
+        requestObj[@"currency"] = orderData[@"currency"];
+        requestObj[@"token"] = token;
+        requestObj[@"payment_system"] = bank.bankId;
+        requestObj[@"kkh"] = encodedDeviceData;
+
+        [self payJsonNetworkRequestByPath:@"/api/checkout/ajax"
+                                 jsonBody:[PSCloudipspApi requestJson:requestObj]
+                                onSuccess:^(NSDictionary *response) {
+
+            NSString *responseStatus = response[@"response_status"] ?: @"";
+            NSString *action = response[@"action"] ?: @"";
+            NSString *errorMessage= response[@"error_message"] ?: @"";
+
+            if ([responseStatus isEqualToString:@"success"] &&
+                [action isEqualToString:@"redirect"] &&
+                response[@"url"]) {
+
+                NSString *redirectUrl = response[@"url"];
+                NSString *target = response[@"target"] ?: @"_top";
+
+                [self handleRedirect:redirectUrl
+                              target:target
+                            delegate:delegate
+                            response:response
+                        autoRedirect:autoRedirect];
+            } else {
+                if ([delegate respondsToSelector:@selector(onPaidFailure:)]) {
+                    NSString *message = [NSString stringWithFormat:@"Payment initiation failed: payment status: %@,message: %@, action: %@", responseStatus,errorMessage, action];
+                    NSError *error = [NSError errorWithDomain:@"CloudipspApi"
+                                                         code:400
+                                                     userInfo:@{NSLocalizedDescriptionKey: message}];
+                    [delegate onPaidFailure:error];
+                }
+            }
+        } payDelegate:delegate];
+    }];
+}
+
+
+- (void)initiateBankPaymentWithOrder:(PSOrder *)order
+                                bank:(PSBank *)bank
+                        autoRedirect:(BOOL)autoRedirect
+                         payDelegate:(id<PSPayCallbackDelegate>)delegate {
+
+    [self getToken:order
+        onSuccess:^(NSString *token) {
+            [self initiateBankPaymentWithToken:token
+                                           bank:bank
+                                   autoRedirect:autoRedirect
+                                    payDelegate:delegate];
+        }
+     payDelegate:delegate];
+}
+
+
+
+- (void)handleRedirect:(NSString *)urlString
+                           target:(NSString *)target
+                         delegate:(id<PSPayCallbackDelegate>)delegate
+                         response:(NSDictionary *)response
+                     autoRedirect:(BOOL)autoRedirect {
+    
+    // Create redirect details
+    PSBankRedirectDetails *redirectDetails = [[PSBankRedirectDetails alloc] initWithAction:response[@"action"]
+                                                                                         url:response[@"url"]
+                                                                                      target:response[@"target"]
+                                                                              responseStatus:response[@"response_status"]];
+    
+    if (!autoRedirect) {
+        if ([delegate respondsToSelector:@selector(onRedirected:)]) {
+            [delegate onRedirected:redirectDetails];
+        }
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (url == nil) {
+        if ([delegate respondsToSelector:@selector(onPaidFailure:)]) {
+            NSError *error = [NSError errorWithDomain:@"CloudipspApi"
+                                                 code:400
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid redirect URL"}];
+            [delegate onPaidFailure:error];
+        }
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIApplication *application = UIApplication.sharedApplication;
+
+        // _blank equivalent — open in Safari
+        if ([target isEqualToString:@"_blank"]) {
+            if ([application canOpenURL:url]) {
+                [application openURL:url options:@{} completionHandler:^(BOOL success) {
+                    if (success && [delegate respondsToSelector:@selector(onRedirected:)]) {
+                        [delegate onRedirected:redirectDetails];
+                    }
+                }];
+            } else if ([delegate respondsToSelector:@selector(onPaidFailure:)]) {
+                NSError *error = [NSError errorWithDomain:@"CloudipspApi"
+                                                     code:404
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"No application available to handle payment URL"}];
+                [delegate onPaidFailure:error];
+            }
+        }
+
+        // _top or _self — use default (can also be Safari or custom WebView)
+        else {
+            if ([application canOpenURL:url]) {
+                [application openURL:url options:@{} completionHandler:^(BOOL success) {
+                    if (success && [delegate respondsToSelector:@selector(onRedirected:)]) {
+                        [delegate onRedirected:redirectDetails];
+                    }
+                }];
+            } else if ([delegate respondsToSelector:@selector(onPaidFailure:)]) {
+                NSError *error = [NSError errorWithDomain:@"CloudipspApi"
+                                                     code:404
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"No application available to handle payment URL"}];
+                [delegate onPaidFailure:error];
+            }
+        }
+    });
+}
+
+
+
+
 
 - (void)applePay:(ApplePayConfig *)config
        aCurrency:(NSString *)currency
