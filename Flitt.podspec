@@ -1,11 +1,11 @@
 #
-# Be sure to run `pod lib lint Cloudipsp.podspec' to ensure this is a
+# Be sure to run `pod lib lint Flitt.podspec' to ensure this is a
 # valid spec before submitting.
 #
 
 Pod::Spec.new do |s|
   s.name             = "Flitt"
-  s.version          = "1.2.0"
+  s.version          = "1.2.1"
   s.summary          = "Library for accepting payments directly from iOS application's clients."
 
   s.homepage         = "https://github.com/flittpayments/ios-sdk"
