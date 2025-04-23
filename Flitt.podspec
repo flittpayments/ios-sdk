@@ -5,7 +5,7 @@
 
 Pod::Spec.new do |s|
   s.name             = "Flitt"
-  s.version          = "1.2.1"
+  s.version          = "1.2.2"
   s.summary          = "Library for accepting payments directly from iOS application's clients."
 
   s.homepage         = "https://github.com/flittpayments/ios-sdk"
