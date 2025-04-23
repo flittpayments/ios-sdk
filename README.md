@@ -43,7 +43,7 @@ Add the package dependency to your Package.swift file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/flittpayments/ios-sdk", from: "1.0.0")
+    .package(url: "https://github.com/flittpayments/ios-sdk", from: "1.2.1")
 ]
 ```
 
